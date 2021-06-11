@@ -80,6 +80,7 @@ impl Object {
 struct Tile {
     blocked: bool,
     block_sight: bool,
+    explored: bool,
 }
 
 impl Tile {
@@ -87,6 +88,7 @@ impl Tile {
         Tile {
             blocked: false,
             block_sight: false,
+            explored: false,
         }
     }
 
@@ -94,6 +96,7 @@ impl Tile {
         Tile {
             blocked: true,
             block_sight: true,
+            explored: false,
         }
     }
 }
@@ -161,7 +164,7 @@ fn main() {
     let mut objects = [player, npc];
 
     let map = make_map(&mut objects[0]);
-    let game = Game { map };
+    let mut game = Game { map };
 
     // populate the FOV map, according to the generated map
     for y in 0..MAP_HEIGHT {
@@ -182,7 +185,7 @@ fn main() {
         tcod.con.clear();
 
         let fov_recompute = previous_player_position != (objects[0].x, objects[0].y);
-        render_all(&mut tcod, &game, &objects, fov_recompute);
+        render_all(&mut tcod, &mut game, &objects, fov_recompute);
 
         tcod.root.flush();
 
@@ -298,7 +301,7 @@ fn make_map(player: &mut Object) -> Map {
     map
 }
 
-fn render_all(tcod: &mut Tcod, game: &Game, objects: &[Object], fov_recompute: bool) {
+fn render_all(tcod: &mut Tcod, game: &mut Game, objects: &[Object], fov_recompute: bool) {
     if fov_recompute {
         let player = &objects[0];
         tcod.fov
@@ -318,8 +321,15 @@ fn render_all(tcod: &mut Tcod, game: &Game, objects: &[Object], fov_recompute: b
                 (true, true) => COLOR_LIGHT_WALL,
                 (true, false) => COLOR_LIGHT_GROUND,
             };
-            tcod.con
-                .set_char_background(x, y, color, BackgroundFlag::Set);
+
+            let explored = &mut game.map[x as usize][y as usize].explored;
+            if visible {
+                *explored = true;
+            }
+            if *explored {
+                tcod.con
+                    .set_char_background(x, y, color, BackgroundFlag::Set);
+            }
         }
     }
 
