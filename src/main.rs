@@ -32,10 +32,14 @@ const COLOR_LIGHT_GROUND: Color = Color {
 const ROOM_MAX_SIZE: i32 = 10;
 const ROOM_MIN_SIZE: i32 = 6;
 const MAX_ROOMS: i32 = 30;
+const MAX_ROOM_MONSTER: i32 = 5;
 
 const FOV_ALGO: FovAlgorithm = FovAlgorithm::Basic;
 const FOV_LIGHT_WALLS: bool = true;
 const TORCH_RADIUS: i32 = 10;
+
+// player will always be the first object
+const PLAYER: usize = 0;
 
 struct Tcod {
     root: Root,
@@ -70,6 +74,15 @@ impl Object {
     pub fn draw(&self, con: &mut dyn Console) {
         con.set_default_foreground(self.color);
         con.put_char(self.x, self.y, self.char, BackgroundFlag::None);
+    }
+
+    pub fn pos(&self) -> (i32, i32) {
+        (self.x, self.y)
+    }
+
+    pub fn set_pos(&mut self, x: i32, y: i32) {
+        self.x = x;
+        self.y = y;
     }
 }
 
@@ -160,10 +173,9 @@ fn main() {
     };
 
     let player = Object::new(0, 0, '@', WHITE);
-    let npc = Object::new(SCREEN_WIDTH / 2 - 5, SCREEN_HEIGHT / 2, '@', YELLOW);
-    let mut objects = [player, npc];
+    let mut objects = vec![player];
 
-    let map = make_map(&mut objects[0]);
+    let map = make_map(&mut objects);
     let mut game = Game { map };
 
     // populate the FOV map, according to the generated map
@@ -184,13 +196,13 @@ fn main() {
     while !tcod.root.window_closed() {
         tcod.con.clear();
 
-        let fov_recompute = previous_player_position != (objects[0].x, objects[0].y);
+        let fov_recompute = previous_player_position != objects[PLAYER].pos();
         render_all(&mut tcod, &mut game, &objects, fov_recompute);
 
         tcod.root.flush();
 
-        let player = &mut objects[0];
-        previous_player_position = (player.x, player.y);
+        let player = &mut objects[PLAYER];
+        previous_player_position = player.pos();
         let exit = handle_keys(&mut tcod, &game, player);
         if exit {
             break;
@@ -248,7 +260,7 @@ fn create_v_tunnel(y1: i32, y2: i32, x: i32, map: &mut Map) {
     }
 }
 
-fn make_map(player: &mut Object) -> Map {
+fn make_map(objects: &mut Vec<Object>) -> Map {
     let mut map = vec![vec![Tile::wall(); MAP_HEIGHT as usize]; MAP_WIDTH as usize];
 
     let mut rooms = vec![];
@@ -268,12 +280,12 @@ fn make_map(player: &mut Object) -> Map {
 
         if !failed {
             create_room(new_room, &mut map);
+            place_objects(new_room, objects);
 
             let (new_x, new_y) = new_room.center();
 
             if rooms.is_empty() {
-                player.x = new_x;
-                player.y = new_y;
+                objects[PLAYER].set_pos(new_x, new_y);
             } else {
                 let (prev_x, prev_y) = rooms[rooms.len() - 1].center();
                 if rand::random() {
@@ -301,9 +313,26 @@ fn make_map(player: &mut Object) -> Map {
     map
 }
 
+fn place_objects(room: Rect, objects: &mut Vec<Object>) {
+    let num_monsters = rand::thread_rng().gen_range(0, MAX_ROOM_MONSTER + 1);
+
+    for _ in 0..num_monsters {
+        let x = rand::thread_rng().gen_range(room.x1 + 1, room.x2);
+        let y = rand::thread_rng().gen_range(room.y1 + 1, room.y2);
+
+        let monster = if rand::random::<f32>() < 0.8 {
+            Object::new(x, y, 'o', DESATURATED_GREEN)
+        } else {
+            Object::new(x, y, 'T', DARKER_GREEN)
+        };
+
+        objects.push(monster);
+    }
+}
+
 fn render_all(tcod: &mut Tcod, game: &mut Game, objects: &[Object], fov_recompute: bool) {
     if fov_recompute {
-        let player = &objects[0];
+        let player = &objects[PLAYER];
         tcod.fov
             .compute_fov(player.x, player.y, TORCH_RADIUS, FOV_LIGHT_WALLS, FOV_ALGO);
     }
