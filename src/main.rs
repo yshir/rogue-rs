@@ -384,9 +384,16 @@ fn main_menu(tcod: &mut Tcod) {
             }
             Some(1) => {
                 // load game
-                let (mut game, mut objects) = load_game().unwrap();
-                initialize_fov(tcod, &game.map);
-                play_game(tcod, &mut game, &mut objects);
+                match load_game() {
+                    Ok((mut game, mut objects)) => {
+                        initialize_fov(tcod, &game.map);
+                        play_game(tcod, &mut game, &mut objects);
+                    }
+                    Err(_e) => {
+                        msgbox("\nNo saved game to load.\n", 24, &mut tcod.root);
+                        continue;
+                    }
+                }
             }
             Some(2) => {
                 // quit
@@ -498,6 +505,11 @@ fn load_game() -> Result<(Game, Vec<Object>), Box<dyn Error>> {
     file.read_to_string(&mut json_save_state)?;
     let result = serde_json::from_str::<(Game, Vec<Object>)>(&json_save_state)?;
     Ok(result)
+}
+
+fn msgbox(text: &str, width: i32, root: &mut Root) {
+    let options: &[&str] = &[];
+    menu(text, options, width, root);
 }
 
 /**
