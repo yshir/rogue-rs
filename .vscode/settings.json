@@ -2,9 +2,12 @@
   "editor.formatOnSave": true,
   "cSpell.words": [
     "blit",
+    "didnt",
     "fullscreen",
     "greyscale",
     "keypress",
-    "tcod"
+    "take",
+    "tcod",
+    "turn"
   ]
 }
