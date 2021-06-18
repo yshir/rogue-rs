@@ -1,6 +1,10 @@
-use rand::Rng;
 use std::cmp;
-use std::vec;
+use std::error::Error;
+use std::fs::File;
+use std::io::{Read, Write};
+
+use rand::Rng;
+use serde::{Deserialize, Serialize};
 use tcod::colors::*;
 use tcod::console::*;
 use tcod::input::{self, Event, Key, Mouse};
@@ -71,6 +75,7 @@ struct Tcod {
     mouse: Mouse,
 }
 
+#[derive(Serialize, Deserialize)]
 struct Messages {
     messages: Vec<(String, Color)>,
 }
@@ -92,7 +97,7 @@ impl Messages {
 /**
  * combat-related properties and methods (monster, player, NPC)
  */
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 struct Fighter {
     max_hp: i32,
     hp: i32,
@@ -101,7 +106,7 @@ struct Fighter {
     on_death: DeathCallback,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 enum Ai {
     Basic,
     Confused {
@@ -110,7 +115,7 @@ enum Ai {
     },
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 enum DeathCallback {
     Player,
     Monster,
@@ -130,7 +135,7 @@ impl DeathCallback {
 /**
  * This is a generic object: the player, a monster, an item, the stairs...tcod
  */
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 struct Object {
     x: i32,
     y: i32,
@@ -237,7 +242,7 @@ impl Object {
 /**
  * A tile of the map and its properties
  */
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 struct Tile {
     blocked: bool,
     block_sight: bool,
@@ -265,7 +270,7 @@ impl Tile {
 /**
  * A rectangle on the map, used to characterise a room.
  */
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 struct Rect {
     x1: i32,
     y1: i32,
@@ -300,20 +305,21 @@ impl Rect {
 
 type Map = Vec<Vec<Tile>>;
 
+#[derive(Serialize, Deserialize)]
 struct Game {
     map: Map,
     messages: Messages,
     inventory: Vec<Object>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 enum PlayerAction {
     TookTurn,
     DidntTakeTurn,
     Exit,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 enum Item {
     Heal,
     Lightning,
@@ -321,6 +327,7 @@ enum Item {
     Fireball,
 }
 
+#[derive(Serialize, Deserialize)]
 enum UseResult {
     UsedUp,
     Cancelled,
@@ -373,6 +380,12 @@ fn main_menu(tcod: &mut Tcod) {
             Some(0) => {
                 // new game
                 let (mut game, mut objects) = new_game(tcod);
+                play_game(tcod, &mut game, &mut objects);
+            }
+            Some(1) => {
+                // load game
+                let (mut game, mut objects) = load_game().unwrap();
+                initialize_fov(tcod, &game.map);
                 play_game(tcod, &mut game, &mut objects);
             }
             Some(2) => {
@@ -457,6 +470,7 @@ fn play_game(tcod: &mut Tcod, game: &mut Game, objects: &mut Vec<Object>) {
         previous_player_position = objects[PLAYER].pos();
         let player_action = handle_keys(tcod, game, objects);
         if player_action == PlayerAction::Exit {
+            save_game(game, objects).unwrap();
             break;
         }
 
@@ -469,6 +483,21 @@ fn play_game(tcod: &mut Tcod, game: &mut Game, objects: &mut Vec<Object>) {
             }
         }
     }
+}
+
+fn save_game(game: &Game, objects: &[Object]) -> Result<(), Box<dyn Error>> {
+    let save_data = serde_json::to_string(&(game, objects))?;
+    let mut file = File::create("save_game")?;
+    file.write_all(save_data.as_bytes())?;
+    Ok(())
+}
+
+fn load_game() -> Result<(Game, Vec<Object>), Box<dyn Error>> {
+    let mut json_save_state = String::new();
+    let mut file = File::open("save_game")?;
+    file.read_to_string(&mut json_save_state)?;
+    let result = serde_json::from_str::<(Game, Vec<Object>)>(&json_save_state)?;
+    Ok(result)
 }
 
 /**
