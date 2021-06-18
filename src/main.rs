@@ -345,7 +345,13 @@ fn main() {
         mouse: Default::default(),
     };
 
-    let mut player = Object::new(0, 0, '@', "Player", WHITE, true);
+    let (mut game, mut objects) = new_game(&mut tcod);
+    play_game(&mut tcod, &mut game, &mut objects);
+}
+
+fn new_game(tcod: &mut Tcod) -> (Game, Vec<Object>) {
+    // create object representing the player
+    let mut player = Object::new(0, 0, '@', "player", WHITE, true);
     player.alive = true;
     player.fighter = Some(Fighter {
         max_hp: 30,
@@ -354,6 +360,8 @@ fn main() {
         power: 5,
         on_death: DeathCallback::Player,
     });
+
+    // the list of objects with just the player
     let mut objects = vec![player];
 
     let mut game = Game {
@@ -362,29 +370,37 @@ fn main() {
         inventory: vec![],
     };
 
-    // populate the FOV map, according to the generated map
-    for y in 0..MAP_HEIGHT {
-        for x in 0..MAP_WIDTH {
-            tcod.fov.set(
-                x,
-                y,
-                !game.map[x as usize][y as usize].block_sight,
-                !game.map[x as usize][y as usize].blocked,
-            )
-        }
-    }
+    initialize_fov(tcod, &game.map);
 
-    // force FOV "recompute" first time through the game loop
-    let mut previous_player_position = (-1, -1);
-
-    // a warm welcoming message!
+    // welcome message
     game.messages.add(
         "Welcome stranger! Prepare to perish in the Tombs of the Ancient Kings",
         RED,
     );
 
+    (game, objects)
+}
+
+fn initialize_fov(tcod: &mut Tcod, map: &Map) {
+    // create the FOV map, according to the generated map
+    for y in 0..MAP_HEIGHT {
+        for x in 0..MAP_WIDTH {
+            tcod.fov.set(
+                x,
+                y,
+                !map[x as usize][y as usize].block_sight,
+                !map[x as usize][y as usize].blocked,
+            );
+        }
+    }
+}
+
+fn play_game(tcod: &mut Tcod, game: &mut Game, objects: &mut Vec<Object>) {
+    // force FOV "recompute" first time through the game loop
+    let mut previous_player_position = (-1, -1);
+
     while !tcod.root.window_closed() {
-        // clear the screen of the previous frame
+        // clear the screen of the previous game
         tcod.con.clear();
 
         match input::check_for_event(input::MOUSE | input::KEY_PRESS) {
@@ -394,14 +410,14 @@ fn main() {
         }
 
         // render the screen
-        let fov_recompute = previous_player_position != objects[PLAYER].pos();
-        render_all(&mut tcod, &mut game, &objects, fov_recompute);
+        let fov_recompute = previous_player_position != (objects[PLAYER].pos());
+        render_all(tcod, game, &objects, fov_recompute);
 
         tcod.root.flush();
 
         // handle keys and exit game if needed
         previous_player_position = objects[PLAYER].pos();
-        let player_action = handle_keys(&mut tcod, &mut game, &mut objects);
+        let player_action = handle_keys(tcod, game, objects);
         if player_action == PlayerAction::Exit {
             break;
         }
@@ -410,7 +426,7 @@ fn main() {
         if objects[PLAYER].alive && player_action != PlayerAction::DidntTakeTurn {
             for id in 0..objects.len() {
                 if objects[id].ai.is_some() {
-                    ai_take_turn(id, &tcod, &mut game, &mut objects);
+                    ai_take_turn(id, tcod, game, objects);
                 }
             }
         }
